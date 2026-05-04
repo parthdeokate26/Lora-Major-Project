@@ -9,8 +9,8 @@
 #include <ArduinoJson.h>
 
 // WiFi credentials
-const char* ssid = "Dedsec";
-const char* password = "asdfghjkl";
+const char* ssid = "Room-201";
+const char* password = "123123123";
 
 // LoRa pins for TTGO T1 without display
 #define LORA_SS 18
@@ -22,7 +22,7 @@ const char* password = "asdfghjkl";
 
 // Web server configuration
 const char* captivePortal = "lorasender.local";
-const char* apiEndpoint = "192.168.25.237:8000";
+const char* apiEndpoint = "10.10.189.85:8000";
 
 // LoRa configuration
 const int frequency = 868E6; // 868MHz
