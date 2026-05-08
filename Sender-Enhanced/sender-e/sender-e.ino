@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include <Arduino.h> 
 #include <Wire.h>
 #include <SPI.h>
 #include <LoRa.h>
@@ -11,8 +11,8 @@
 #include <EEPROM.h>
 
 // WiFi credentials
-const char* ssid = "Dedsec";
-const char* password = "asdfghjkl";
+const char* ssid = "Room-201";
+const char* password = "123123123";
 
 // LoRa pins for TTGO LoRa32 V1
 #define LORA_SS 18
@@ -24,11 +24,11 @@ const char* password = "asdfghjkl";
 
 // Web server configuration
 const char* captivePortal = "lorasender-enhanced.local";
-const char* apiEndpoint = "192.168.25.237:8000";
+const char* apiEndpoint = "10.180.142.199:8000";
 
 // LoRa configuration - initial values, will be optimized
 int sf = 7; // Spreading Factor
-int bw = 500E3; // Changed from 125E3 to 500E3
+int bw = 125E3; // Match receiver default
 int cr = 5; // Coding Rate
 const int frequency = 868E6; // 868MHz
 
@@ -936,12 +936,12 @@ void exploreParameters() {
             }
             // In clean environments, try wider bandwidth
             else if (rssiCount > 0 && avgSNR > 15) {
-                int bwOptions[] = {125E3, 250E3, 500E3};
+                int bwOptions[] = {125000, 250000, 500000};
                 exploreBW = bwOptions[random(3)];
             }
             // Otherwise random
             else {
-                int bwOptions[] = {125E3, 250E3, 500E3};
+                int bwOptions[] = {125000, 250000, 500000};
                 exploreBW = bwOptions[random(3)];
             }
             paramChanged = true;
@@ -1038,7 +1038,7 @@ void handleSend() {
     
     // Always use default parameters for initial transmission
     int initialSf = 7;
-    int initialBw = 500E3;  // Changed from 125E3 to 500E3
+    int initialBw = 125E3;  // Match receiver default
     int initialCr = 5;
     
     // Set default parameters for initial transmission
@@ -1046,7 +1046,7 @@ void handleSend() {
     LoRa.setSignalBandwidth(initialBw);
     LoRa.setCodingRate4(initialCr);
     
-    Serial.println("Initial transmission with default parameters: SF7, BW500, CR5");
+    Serial.println("Initial transmission with default parameters: SF7, BW125, CR5");
     
     LoRa.beginPacket();
     LoRa.print("ENHANCED:" + metaPayload);
@@ -1056,15 +1056,14 @@ void handleSend() {
     
     // Wait for ACK with adaptive timeout based on SF
     // Higher SF needs longer timeout
-    int timeout = 2000 + (initialSf - 7) * 500; // Base 2s + 500ms per SF level above 7
-    timeout = min(timeout, 5000);  // Cap maximum timeout
+    int timeout = 5000; // Fixed 5 second ACK timeout
     
     unsigned long ackTime = millis();
     String ackData = "";
     bool ackReceived = false;
     bool receiverParamsReceived = false;
     int receiverSf = 7;
-    int receiverBw = 500E3;
+    int receiverBw = 125E3;
     int receiverCr = 5;
     
     Serial.println("Waiting for ACK with timeout: " + String(timeout) + "ms");
@@ -1072,6 +1071,7 @@ void handleSend() {
     while (millis() - ackTime < timeout) {
         if (LoRa.parsePacket()) {
             String ack = LoRa.readString();
+            Serial.println("Received possible ACK: " + ack);
             if (ack.startsWith("ENHANCED_ACK:")) {
                 ackData = ack.substring(13); // Remove the ENHANCED_ACK: prefix
                 ackReceived = true;
@@ -1201,7 +1201,7 @@ void handleSend() {
         
         // If ACK not received, revert to default parameters
         sf = 7;
-        bw = 500E3;  // Changed from 125E3 to 500E3
+        bw = 125E3;  // Match receiver default
         cr = 5;
         LoRa.setSpreadingFactor(sf);
         LoRa.setSignalBandwidth(bw);
@@ -1286,7 +1286,7 @@ void setup() {
     } else {
         // Initialize EEPROM with default values
         sf = 7;
-        bw = 500E3;  // Changed from 125E3 to 500E3
+        bw = 125E3;  // Match receiver default
         cr = 5;
         EEPROM.put(EEPROM_SF_ADDR, sf);
         EEPROM.put(EEPROM_BW_ADDR, bw);

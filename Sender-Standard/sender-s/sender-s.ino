@@ -9,8 +9,8 @@
 #include <ArduinoJson.h>
 
 // WiFi credentials
-const char* ssid = "Room-201";
-const char* password = "123123123";
+const char* ssid = "POCO M3";
+const char* password = "12345678";
 
 // LoRa pins for TTGO T1 without display
 #define LORA_SS 18
@@ -22,7 +22,7 @@ const char* password = "123123123";
 
 // Web server configuration
 const char* captivePortal = "lorasender.local";
-const char* apiEndpoint = "10.10.189.85:8000";
+const char* apiEndpoint = "10.180.142.199:8000";
 
 // LoRa configuration
 const int frequency = 868E6; // 868MHz
@@ -434,7 +434,7 @@ void handleSend() {
     // Add a short delay to give the receiver time to process
     delay(50);
     
-    while (millis() - ackTime < 2000) {
+    while (millis() - ackTime < 5000) {
         if (LoRa.parsePacket()) {
             String ack = LoRa.readString();
             if (ack.startsWith("STANDARD_ACK:")) {
@@ -477,9 +477,9 @@ void handleSend() {
         // If no ACK received, use local measurements
         result.rssi = -120; // Very poor signal as placeholder
         result.snr = 0;
-        result.delay = 2000; // Timeout value
+        result.delay = 5000; // Timeout value
         result.datarate = 0; // Failed transmission
-        result.latency = 2000;
+        result.latency = 5000;
     }
     
     // Prepare JSON response for both API and web interface

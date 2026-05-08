@@ -80,6 +80,8 @@ void loop() {
         String received = LoRa.readString();
         Serial.println("Received: " + received);
         
+        delay(100); // Allow LoRa to process received packet
+        
         // Use global variables for current parameters
         int currentSf = sf;
         int currentBw = bw;
@@ -335,6 +337,16 @@ void adaptiveOptimize(float rssi, float snr, int payloadSize, int& optSf, int& o
 }
 
 void sendAcknowledgement(ReceptionMetrics metrics) {
+    // Save current LoRa receive settings
+    int savedSf = sf;
+    int savedBw = bw;
+    int savedCr = cr;
+
+    // Send ACK on default parameters so the sender can receive it
+    LoRa.setSpreadingFactor(7);
+    LoRa.setSignalBandwidth(125E3);
+    LoRa.setCodingRate4(5);
+
     // Calculate optimal parameters based on signal quality
     int optSf = 7;
     int optBw = 125E3;
@@ -361,13 +373,22 @@ void sendAcknowledgement(ReceptionMetrics metrics) {
     ack += "}";
     
     // Send ACK
-    LoRa.beginPacket();
-    LoRa.print(ack);
-    LoRa.endPacket();
+    delay(50); // Wait for LoRa to be ready
+    if (LoRa.beginPacket()) {
+        LoRa.print(ack);
+        if (LoRa.endPacket()) {
+            Serial.println("Sent ACK successfully: " + ack);
+        } else {
+            Serial.println("Failed to end ACK packet");
+        }
+    } else {
+        Serial.println("Failed to begin ACK packet");
+    }
     
-    Serial.println("Sent ACK: " + ack);
-    
-    // Ensure we're in receive mode after sending
+    // Restore prior receive settings and switch back to receive mode
+    LoRa.setSpreadingFactor(savedSf);
+    LoRa.setSignalBandwidth(savedBw);
+    LoRa.setCodingRate4(savedCr);
     LoRa.receive();
 }
 
