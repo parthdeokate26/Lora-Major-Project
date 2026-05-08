@@ -11,8 +11,8 @@
 #include <EEPROM.h>
 
 // WiFi credentials
-const char* ssid = "Room-201";
-const char* password = "123123123";
+const char* ssid = "3rd-Floor";
+const char* password = "spit@123";
 
 // LoRa pins for TTGO LoRa32 V1
 #define LORA_SS 18
@@ -24,7 +24,7 @@ const char* password = "123123123";
 
 // Web server configuration
 const char* captivePortal = "lorasender-enhanced.local";
-const char* apiEndpoint = "10.180.142.199:8000";
+const char* apiEndpoint = "10.10.176.65:8000";
 
 // LoRa configuration - initial values, will be optimized
 int sf = 7; // Spreading Factor

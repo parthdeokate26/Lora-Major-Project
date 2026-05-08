@@ -7,10 +7,10 @@
 #include <DNSServer.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-
+123
 // WiFi credentials
-const char* ssid = "POCO M3";
-const char* password = "12345678";
+const char* ssid = "3rd-Floor";
+const char* password = "spit@123";
 
 // LoRa pins for TTGO T1 without display
 #define LORA_SS 18
@@ -22,7 +22,7 @@ const char* password = "12345678";
 
 // Web server configuration
 const char* captivePortal = "lorasender.local";
-const char* apiEndpoint = "10.180.142.199:8000";
+const char* apiEndpoint = "10.10.176.65:8000";
 
 // LoRa configuration
 const int frequency = 868E6; // 868MHz
@@ -431,12 +431,13 @@ void handleSend() {
     String ackData = "";
     bool ackReceived = false;
     
-    // Add a short delay to give the receiver time to process
-    delay(50);
+    // Add a longer delay to give the receiver time to process and send ACK
+    delay(100);  // Increased from 50ms to 100ms
     
     while (millis() - ackTime < 5000) {
         if (LoRa.parsePacket()) {
             String ack = LoRa.readString();
+            Serial.println("Received potential ACK: " + ack);  // Debug line
             if (ack.startsWith("STANDARD_ACK:")) {
                 ackData = ack.substring(13); // Remove the STANDARD_ACK: prefix
                 ackReceived = true;

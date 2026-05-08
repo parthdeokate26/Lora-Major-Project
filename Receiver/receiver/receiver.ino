@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <LoRa.h>
-
 // LoRa pins for TTGO LoRa32 V2.1
 #define SCK     5    // GPIO5  -- SX1278's SCK
 #define MISO    19   // GPIO19 -- SX1278's MISO
@@ -79,6 +78,8 @@ void loop() {
         unsigned long receiveTime = millis();
         String received = LoRa.readString();
         Serial.println("Received: " + received);
+        Serial.println("RSSI: " + String(LoRa.packetRssi()) + " dBm");
+        Serial.println("SNR: " + String(LoRa.packetSnr()) + " dB");
         
         delay(100); // Allow LoRa to process received packet
         
@@ -373,7 +374,8 @@ void sendAcknowledgement(ReceptionMetrics metrics) {
     ack += "}";
     
     // Send ACK
-    delay(50); // Wait for LoRa to be ready
+    delay(100); // Wait for LoRa to be ready (increased from 50ms)
+    Serial.println("Sending ACK: " + ack);
     if (LoRa.beginPacket()) {
         LoRa.print(ack);
         if (LoRa.endPacket()) {
