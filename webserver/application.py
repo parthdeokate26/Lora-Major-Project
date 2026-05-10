@@ -30,12 +30,13 @@ def add_transmission():
         
         cursor.execute('''
             INSERT INTO transmissions (
-                type, data, sf, bw, cr, rssi, snr, delay, datarate, latency, source, compression_ratio
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                type, data, sf, bw, cr, rssi, snr, delay, datarate, latency, source, compression_ratio, payload_size
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['type'], data['data'], data['sf'], data['bw'], data['cr'],
             data['rssi'], data['snr'], data['delay'], data['datarate'],
-            data['latency'], data.get('source', 'standard'), data.get('compressionRatio', 1.0)
+            data['latency'], data.get('source', 'standard'), data.get('compressionRatio', 1.0),
+            data.get('payloadSize', 0)
         ))
         
         conn.commit()

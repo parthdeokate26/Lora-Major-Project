@@ -26,7 +26,8 @@ def create_tables():
             datarate REAL,
             latency INTEGER,
             source TEXT NOT NULL,
-            compression_ratio REAL
+            compression_ratio REAL,
+            payload_size INTEGER DEFAULT 0
         )
     ''')
 
