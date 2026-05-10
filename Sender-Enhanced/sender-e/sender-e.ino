@@ -11,8 +11,8 @@
 #include <EEPROM.h>
 
 // WiFi credentials
-const char* ssid = "3rd-Floor";
-const char* password = "spit@123";
+const char* ssid = "POCO M3";
+const char* password = "12345678";
 
 // LoRa pins for TTGO LoRa32 V1
 #define LORA_SS 18
@@ -21,10 +21,10 @@ const char* password = "spit@123";
 #define LORA_MOSI 27
 #define LORA_MISO 19
 #define LORA_SCK 5
-
+//pppp
 // Web server configuration
 const char* captivePortal = "lorasender-enhanced.local";
-const char* apiEndpoint = "10.10.176.65:8000";
+const char* apiEndpoint = "10.46.143.199:8000";
 
 // LoRa configuration - initial values, will be optimized
 int sf = 7; // Spreading Factor
@@ -1118,7 +1118,8 @@ void handleSend() {
             result.snr = doc["snr"];
             unsigned long ackTimestamp = doc["timestamp"];
             result.delay = (millis() - startTime);
-            result.datarate = (originalPayload.length() * 8) / (result.delay / 1000.0); // Use original length for true data rate
+            String transmittedPayload = "ENHANCED:" + metaPayload;
+            result.datarate = (transmittedPayload.length() * 8) / (result.delay / 1000.0); // Use actual transmitted length
             result.latency = result.delay;
             
             // Check if receiver has suggested optimal parameters
