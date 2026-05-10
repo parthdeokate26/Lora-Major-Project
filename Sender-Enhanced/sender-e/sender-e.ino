@@ -9,6 +9,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include "auto_sender.h"
 
 // WiFi credentials
 const char* ssid = "POCO M3";
@@ -21,10 +22,10 @@ const char* password = "12345678";
 #define LORA_MOSI 27
 #define LORA_MISO 19
 #define LORA_SCK 5
-//pppp
+
 // Web server configuration
 const char* captivePortal = "lorasender-enhanced.local";
-const char* apiEndpoint = "10.46.143.199:8000";
+const char* apiEndpoint = "10.46.143.187:8000";
 
 // LoRa configuration - initial values, will be optimized
 int sf = 7; // Spreading Factor
@@ -268,6 +269,8 @@ const char* html = R"rawliteral(
             <div id="loading" class="loading">Optimizing and sending data...</div>
         </form>
     </div>
+
+
 
     <div class="panel">
         <h2>Adaptive Parameters</h2>
@@ -518,6 +521,7 @@ const char* html = R"rawliteral(
         
         // Initialize preview
         updatePreview();
+    
     </script>
 </body>
 </html>
@@ -1118,8 +1122,7 @@ void handleSend() {
             result.snr = doc["snr"];
             unsigned long ackTimestamp = doc["timestamp"];
             result.delay = (millis() - startTime);
-            String transmittedPayload = "ENHANCED:" + metaPayload;
-            result.datarate = (transmittedPayload.length() * 8) / (result.delay / 1000.0); // Use actual transmitted length
+            result.datarate = (originalPayload.length() * 8) / (result.delay / 1000.0); // Use original length for true data rate
             result.latency = result.delay;
             
             // Check if receiver has suggested optimal parameters
@@ -1337,11 +1340,104 @@ void setup() {
     
     Serial.println("Enhanced Sender initialized with Smart Framework");
     Serial.println("Current parameters: SF" + String(sf) + ", BW:" + String(bw) + ", CR:" + String(cr));
+    
+    // Initialize auto-sender
+    initAutoSender();
 }
 
 void loop() {
     dnsServer.processNextRequest();
     server.handleClient();
+    
+    // Handle auto-send: Send different payloads every 5 seconds
+    if (autoSender.enabled && shouldSendAutoMessage()) {
+        String dataType = "";
+        int payloadSize = 0;
+        String payload = getAutoSendMessage(dataType, payloadSize);
+        
+        // Prepare to send via form-like POST
+        String compressedPayload = compressData(dataType.c_str(), payload);
+        float compressionRatio = getCompressionRatio(payload, compressedPayload);
+        
+        // Add metadata
+        String metaPayload = compressedPayload + "<META:SF" + String(sf) + ",BW" + String(bw/1000) + ",CR" + String(cr) + ">";
+        
+        // Send via LoRa
+        unsigned long startTime = millis();
+        int initialSf = 7;
+        int initialBw = 125E3;
+        int initialCr = 5;
+        
+        LoRa.setSpreadingFactor(initialSf);
+        LoRa.setSignalBandwidth(initialBw);
+        LoRa.setCodingRate4(initialCr);
+        
+        LoRa.beginPacket();
+        LoRa.print("ENHANCED:" + metaPayload);
+        LoRa.endPacket();
+        delay(50);
+        LoRa.receive();
+        
+        // Wait for ACK
+        int timeout = 5000;
+        unsigned long ackTime = millis();
+        String ackData = "";
+        bool ackReceived = false;
+        
+        while (millis() - ackTime < timeout) {
+            if (LoRa.parsePacket()) {
+                String ack = LoRa.readString();
+                if (ack.startsWith("ENHANCED_ACK:")) {
+                    ackData = ack.substring(13);
+                    ackReceived = true;
+                    break;
+                }
+            }
+            delay(10);
+        }
+        
+        // Parse and send results to API
+        if (ackReceived) {
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, ackData);
+            
+            if (!error) {
+                float rssi = doc["rssi"];
+                float snr = doc["snr"];
+                float delay_time = (millis() - startTime);
+                float datarate = (payload.length() * 8) / (delay_time / 1000.0);
+                
+                // Send to API
+                if (WiFi.status() == WL_CONNECTED) {
+                    HTTPClient http;
+                    http.begin(String("http://") + apiEndpoint + "/api/transmission");
+                    http.addHeader("Content-Type", "application/json");
+                    String json = "{";
+                    json += "\"type\":\"" + dataType + "\",";
+                    json += "\"data\":\"" + compressedPayload + "\",";
+                    json += "\"sf\":" + String(initialSf) + ",";
+                    json += "\"bw\":" + String(initialBw) + ",";
+                    json += "\"cr\":" + String(initialCr) + ",";
+                    json += "\"rssi\":" + String(rssi) + ",";
+                    json += "\"snr\":" + String(snr) + ",";
+                    json += "\"delay\":" + String(delay_time) + ",";
+                    json += "\"datarate\":" + String(datarate) + ",";
+                    json += "\"latency\":" + String(delay_time) + ",";
+                    json += "\"source\":\"enhanced\",";
+                    json += "\"compressionRatio\":" + String(compressionRatio) + ",";
+                    json += "\"payloadSize\":" + String(payloadSize);
+                    json += "}";
+                    
+                    http.POST(json);
+                    http.end();
+                }
+            }
+        }
+        
+        // Cycle to next configuration
+        cycleAutoSendConfig();
+        Serial.println(getAutoSendInfo());
+    }
     
     // Handle serial commands
     if (Serial.available()) {
@@ -1361,6 +1457,15 @@ void loop() {
             Serial.println("Sent enhanced data");
         } else if (command == "status") {
             Serial.println("Current parameters: SF" + String(sf) + ", BW:" + String(bw) + ", CR:" + String(cr));
+        } else if (command == "auto_enable") {
+            autoSender.enabled = true;
+            autoSender.lastSendTime = millis();
+            Serial.println("Auto-send ENABLED");
+        } else if (command == "auto_disable") {
+            autoSender.enabled = false;
+            Serial.println("Auto-send DISABLED");
+        } else if (command == "auto_status") {
+            Serial.println(getAutoSendInfo());
         }
     }
 }
