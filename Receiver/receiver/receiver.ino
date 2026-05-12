@@ -338,15 +338,18 @@ void adaptiveOptimize(float rssi, float snr, int payloadSize, int& optSf, int& o
 }
 
 void sendAcknowledgement(ReceptionMetrics metrics) {
-    // Save current LoRa receive settings
-    int savedSf = sf;
-    int savedBw = bw;
-    int savedCr = cr;
-
-    // Send ACK on default parameters so the sender can receive it
-    LoRa.setSpreadingFactor(7);
-    LoRa.setSignalBandwidth(125E3);
-    LoRa.setCodingRate4(5);
+    // Send ACK on the SAME parameters as reception, not defaults!
+    // This ensures sender (still listening on sweep params) can receive ACK
+    int ackSf = sf;      // Use current SF (may have been updated from metadata)
+    int ackBw = bw;      // Use current BW (may have been updated from metadata)
+    int ackCr = cr;      // Use current CR (may have been updated from metadata)
+    
+    // Set ACK transmission parameters to match reception
+    LoRa.setSpreadingFactor(ackSf);
+    LoRa.setSignalBandwidth(ackBw);
+    LoRa.setCodingRate4(ackCr);
+    
+    Serial.println("Sending ACK on matching params -> SF:" + String(ackSf) + " BW:" + String(ackBw) + " CR:" + String(ackCr));
 
     // Calculate optimal parameters based on signal quality
     int optSf = 7;
@@ -373,24 +376,25 @@ void sendAcknowledgement(ReceptionMetrics metrics) {
     ack += "\"data\":\"" + metrics.data + "\"";
     ack += "}";
     
-    // Send ACK
+    // Send ACK on matching parameters
     delay(100); // Wait for LoRa to be ready (increased from 50ms)
     Serial.println("Sending ACK: " + ack);
     if (LoRa.beginPacket()) {
         LoRa.print(ack);
         if (LoRa.endPacket()) {
-            Serial.println("Sent ACK successfully: " + ack);
+            Serial.println("✓ ACK sent successfully");
         } else {
-            Serial.println("Failed to end ACK packet");
+            Serial.println("✗ Failed to end ACK packet");
         }
     } else {
-        Serial.println("Failed to begin ACK packet");
+        Serial.println("✗ Failed to begin ACK packet");
     }
     
-    // Restore prior receive settings and switch back to receive mode
-    LoRa.setSpreadingFactor(savedSf);
-    LoRa.setSignalBandwidth(savedBw);
-    LoRa.setCodingRate4(savedCr);
+    // Now reset to default parameters for next reception
+    Serial.println("Resetting to default parameters");
+    LoRa.setSpreadingFactor(7);
+    LoRa.setSignalBandwidth(125E3);
+    LoRa.setCodingRate4(5);
     LoRa.receive();
 }
 
