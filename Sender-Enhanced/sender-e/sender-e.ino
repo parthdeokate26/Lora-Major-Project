@@ -1231,7 +1231,6 @@ void handleSend() {
         json += "\"datarate\":" + String(result.datarate) + ",";
         json += "\"latency\":" + String(result.latency) + ",";
         json += "\"source\":\"enhanced\",";
-        json += "\"payloadSize\":" + String(originalPayload.length()) + ",";
         json += "\"compressionRatio\":" + String(compressionRatio);
         json += "}";
         
@@ -1350,53 +1349,32 @@ void loop() {
     dnsServer.processNextRequest();
     server.handleClient();
     
-    // Debug auto-send timer
-    if (autoSender.enabled && (millis() - autoSender.lastSendTime >= AUTO_SEND_INTERVAL)) {
-        // Show that timer triggered
-    }
-    
     // Handle auto-send: Send different payloads every 5 seconds
     if (autoSender.enabled && shouldSendAutoMessage()) {
-        // ===== APPLY CURRENT SWEEP PARAMETERS =====
-        // Update global sf, bw, cr with current sweep indices
-        applySweepParameters(sf, bw, cr);
-        
-        Serial.println("\n" + String(autoSender.transmissionCount + 1) + " ======== AUTO-SEND TRANSMISSION ========");
-        Serial.println("TRANSMITTING WITH -> SF:" + String(sf) + " BW:" + String(bw) + " CR:" + String(cr));
-        
         String dataType = "";
         int payloadSize = 0;
         String payload = getAutoSendMessage(dataType, payloadSize);
-        
-        Serial.println("Payload Type: " + dataType + " | Size: " + String(payloadSize) + " bytes");
         
         // Prepare to send via form-like POST
         String compressedPayload = compressData(dataType.c_str(), payload);
         float compressionRatio = getCompressionRatio(payload, compressedPayload);
         
-        Serial.println("Original: " + String(payload.length()) + " bytes | Compressed: " + String(compressedPayload.length()) + " bytes | Ratio: " + String(compressionRatio, 2) + "x");
-        
-        // Add metadata with SWEEP PARAMETERS (not hardcoded defaults!)
+        // Add metadata
         String metaPayload = compressedPayload + "<META:SF" + String(sf) + ",BW" + String(bw/1000) + ",CR" + String(cr) + ">";
-        
-        Serial.println("META: " + metaPayload.substring(0, min(50, (int)metaPayload.length())) + "...");
         
         // Send via LoRa
         unsigned long startTime = millis();
+        int initialSf = 7;
+        int initialBw = 125E3;
+        int initialCr = 5;
         
-        // Use the sweep parameters (already updated via applySweepParameters)
-        LoRa.setSpreadingFactor(sf);
-        LoRa.setSignalBandwidth(bw);
-        LoRa.setCodingRate4(cr);
-        
-        Serial.println("LoRa Parameters Set - Transmitting...");
+        LoRa.setSpreadingFactor(initialSf);
+        LoRa.setSignalBandwidth(initialBw);
+        LoRa.setCodingRate4(initialCr);
         
         LoRa.beginPacket();
         LoRa.print("ENHANCED:" + metaPayload);
         LoRa.endPacket();
-        
-        Serial.println("LoRa Packet Sent - Waiting for ACK...");
-        
         delay(50);
         LoRa.receive();
         
@@ -1405,82 +1383,60 @@ void loop() {
         unsigned long ackTime = millis();
         String ackData = "";
         bool ackReceived = false;
-        float rssi = -120;
-        float snr = 0;
         
         while (millis() - ackTime < timeout) {
             if (LoRa.parsePacket()) {
                 String ack = LoRa.readString();
-                Serial.println("RX Packet: " + ack.substring(0, min(50, (int)ack.length())));
-                
                 if (ack.startsWith("ENHANCED_ACK:")) {
                     ackData = ack.substring(13);
                     ackReceived = true;
-                    rssi = LoRa.packetRssi();
-                    snr = LoRa.packetSnr();
-                    Serial.println("✓ ACK RX'd");
                     break;
                 }
             }
             delay(10);
         }
         
-        if (!ackReceived) {
-            Serial.println("✗ NO ACK RECEIVED (timeout after " + String(timeout) + "ms) - Using local fallback metrics");
-            rssi = -120;
-            snr = 0;
-        }
-        
-        // ===== ALWAYS SEND TO API (ACK or fallback) =====
-        float delay_time = (millis() - startTime);
-        float datarate = (payload.length() * 8) / (delay_time / 1000.0);
-        
-        Serial.println("Metrics -> RSSI:" + String(rssi) + " SNR:" + String(snr) + " Rate:" + String(datarate, 2) + " bps | Delay:" + String(delay_time) + "ms");
-        
-        // Send to API with SWEEP parameters (ALWAYS, regardless of ACK)
-        if (WiFi.status() == WL_CONNECTED) {
-            HTTPClient http;
-            String apiUrl = String("http://") + apiEndpoint + "/api/transmission";
-            Serial.println("API URL: " + apiUrl);
+        // Parse and send results to API
+        if (ackReceived) {
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, ackData);
             
-            http.begin(apiUrl);
-            http.addHeader("Content-Type", "application/json");
-            
-            String json = "{";
-            json += "\"type\":\"" + dataType + "\",";
-            json += "\"data\":\"" + compressedPayload + "\",";
-            json += "\"sf\":" + String(sf) + ",";
-            json += "\"bw\":" + String(bw) + ",";
-            json += "\"cr\":" + String(cr) + ",";
-            json += "\"rssi\":" + String((int)rssi) + ",";
-            json += "\"snr\":" + String(snr, 1) + ",";
-            json += "\"delay\":" + String((int)delay_time) + ",";
-            json += "\"datarate\":" + String(datarate, 1) + ",";
-            json += "\"latency\":" + String((int)delay_time) + ",";
-            json += "\"source\":\"enhanced\",";
-            json += "\"compressionRatio\":" + String(compressionRatio, 2) + ",";
-            json += "\"payloadSize\":" + String(payloadSize);
-            json += "}";
-            
-            Serial.println("POST JSON: " + json);
-            
-            int httpResponseCode = http.POST(json);
-            
-            if (httpResponseCode > 0) {
-                Serial.println("✓ API Response: " + String(httpResponseCode));
-            } else {
-                Serial.println("✗ API Error: " + http.errorToString(httpResponseCode));
+            if (!error) {
+                float rssi = doc["rssi"];
+                float snr = doc["snr"];
+                float delay_time = (millis() - startTime);
+                float datarate = (payload.length() * 8) / (delay_time / 1000.0);
+                
+                // Send to API
+                if (WiFi.status() == WL_CONNECTED) {
+                    HTTPClient http;
+                    http.begin(String("http://") + apiEndpoint + "/api/transmission");
+                    http.addHeader("Content-Type", "application/json");
+                    String json = "{";
+                    json += "\"type\":\"" + dataType + "\",";
+                    json += "\"data\":\"" + compressedPayload + "\",";
+                    json += "\"sf\":" + String(initialSf) + ",";
+                    json += "\"bw\":" + String(initialBw) + ",";
+                    json += "\"cr\":" + String(initialCr) + ",";
+                    json += "\"rssi\":" + String(rssi) + ",";
+                    json += "\"snr\":" + String(snr) + ",";
+                    json += "\"delay\":" + String(delay_time) + ",";
+                    json += "\"datarate\":" + String(datarate) + ",";
+                    json += "\"latency\":" + String(delay_time) + ",";
+                    json += "\"source\":\"enhanced\",";
+                    json += "\"compressionRatio\":" + String(compressionRatio) + ",";
+                    json += "\"payloadSize\":" + String(payloadSize);
+                    json += "}";
+                    
+                    http.POST(json);
+                    http.end();
+                }
             }
-            
-            http.end();
-        } else {
-            Serial.println("✗ WiFi NOT connected - Cannot send to API");
         }
         
         // Cycle to next configuration
         cycleAutoSendConfig();
-        Serial.println("Next cycle: " + getAutoSendInfo());
-        Serial.println("======================================\n");
+        Serial.println(getAutoSendInfo());
     }
     
     // Handle serial commands
