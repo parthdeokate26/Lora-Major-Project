@@ -84,7 +84,7 @@ async function updateStats() {
             const compression = row.avg_compression ? row.avg_compression.toFixed(2) + 'x' : '1.00x';
             
             // Check if this was a failed transmission (no ACK received)
-            const isFailedTransmission = row.avg_rssi <= -120 && row.avg_snr <= 0 && row.avg_datarate <= 0;
+            const isFailedTransmission = row.avg_datarate <= 0;
             const rowClass = isFailedTransmission ? 'bg-danger bg-opacity-25' : sourceClass;
             
             tbody.innerHTML += `

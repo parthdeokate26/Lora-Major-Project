@@ -91,6 +91,7 @@ def get_stats():
         SELECT source, AVG(datarate) as avg_datarate, AVG(latency) as avg_latency, 
         AVG(compression_ratio) as avg_compression
         FROM transmissions
+        WHERE datarate > 0
         GROUP BY source
     ''')
     
@@ -100,11 +101,11 @@ def get_stats():
     cursor.execute('''
         SELECT 
             'comparison' as metric,
-            (SELECT AVG(datarate) FROM transmissions WHERE source = 'enhanced') / 
-            NULLIF((SELECT AVG(datarate) FROM transmissions WHERE source = 'standard'), 0) as datarate_improvement,
-            (SELECT AVG(latency) FROM transmissions WHERE source = 'standard') / 
-            NULLIF((SELECT AVG(latency) FROM transmissions WHERE source = 'enhanced'), 0) as latency_improvement,
-            (SELECT AVG(compression_ratio) FROM transmissions WHERE source = 'enhanced') as compression_ratio
+            (SELECT AVG(datarate) FROM transmissions WHERE source = 'enhanced' AND datarate > 0) / 
+            NULLIF((SELECT AVG(datarate) FROM transmissions WHERE source = 'standard' AND datarate > 0), 0) as datarate_improvement,
+            (SELECT AVG(latency) FROM transmissions WHERE source = 'standard' AND datarate > 0) / 
+            NULLIF((SELECT AVG(latency) FROM transmissions WHERE source = 'enhanced' AND datarate > 0), 0) as latency_improvement,
+            (SELECT AVG(compression_ratio) FROM transmissions WHERE source = 'enhanced' AND datarate > 0) as compression_ratio
     ''')
     
     comparison = cursor.fetchone()

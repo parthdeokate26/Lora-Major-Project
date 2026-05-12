@@ -1035,17 +1035,20 @@ void handleSend() {
     // Send via LoRa with enhanced tag using default parameters for first transmission
     unsigned long startTime = millis();
     
-    // Store current parameters
+    // Store current parameters and advertised parameters for the receiver
     int currentSf = sf;
     int currentBw = bw;
     int currentCr = cr;
+    int advertisedSf = sf;
+    int advertisedBw = bw;
+    int advertisedCr = cr;
     
-    // Always use default parameters for initial transmission
+    // Always use default parameters for initial transmission so receiver can decode the handshake
     int initialSf = 7;
     int initialBw = 125E3;  // Match receiver default
     int initialCr = 5;
     
-    // Set default parameters for initial transmission
+    // Set default parameters for the handshake packet
     LoRa.setSpreadingFactor(initialSf);
     LoRa.setSignalBandwidth(initialBw);
     LoRa.setCodingRate4(initialCr);
@@ -1056,6 +1059,11 @@ void handleSend() {
     LoRa.print("ENHANCED:" + metaPayload);
     LoRa.endPacket();
     delay(50);
+
+    // Switch to the advertised parameters for ACK reception
+    LoRa.setSpreadingFactor(advertisedSf);
+    LoRa.setSignalBandwidth(advertisedBw);
+    LoRa.setCodingRate4(advertisedCr);
     LoRa.receive();
     
     // Wait for ACK with adaptive timeout based on SF
@@ -1172,10 +1180,10 @@ void handleSend() {
             }
         }
         
-        // Record successful transmission in history
-        performanceHistory[historyIndex].sf = initialSf; // Record with initial parameters
-        performanceHistory[historyIndex].bw = initialBw;
-        performanceHistory[historyIndex].cr = initialCr;
+        // Record successful transmission in history using the advertised parameter set
+        performanceHistory[historyIndex].sf = advertisedSf;
+        performanceHistory[historyIndex].bw = advertisedBw;
+        performanceHistory[historyIndex].cr = advertisedCr;
         performanceHistory[historyIndex].rssi = result.rssi;
         performanceHistory[historyIndex].snr = result.snr;
         performanceHistory[historyIndex].datarate = result.datarate;
@@ -1191,10 +1199,10 @@ void handleSend() {
         result.datarate = 0; // Failed transmission
         result.latency = timeout;
         
-        // Record failed transmission in history
-        performanceHistory[historyIndex].sf = initialSf;
-        performanceHistory[historyIndex].bw = initialBw;
-        performanceHistory[historyIndex].cr = initialCr;
+        // Record failed transmission in history using the advertised parameters
+        performanceHistory[historyIndex].sf = advertisedSf;
+        performanceHistory[historyIndex].bw = advertisedBw;
+        performanceHistory[historyIndex].cr = advertisedCr;
         performanceHistory[historyIndex].rssi = result.rssi;
         performanceHistory[historyIndex].snr = result.snr;
         performanceHistory[historyIndex].datarate = result.datarate;
@@ -1349,7 +1357,7 @@ void loop() {
     dnsServer.processNextRequest();
     server.handleClient();
     
-    // Handle auto-send: Send different payloads every 5 seconds
+    // Handle auto-send: Send different payloads and parameter combinations every interval
     if (autoSender.enabled && shouldSendAutoMessage()) {
         String dataType = "";
         int payloadSize = 0;
@@ -1358,6 +1366,15 @@ void loop() {
         // Prepare to send via form-like POST
         String compressedPayload = compressData(dataType.c_str(), payload);
         float compressionRatio = getCompressionRatio(payload, compressedPayload);
+
+        int advertisedSf = AUTO_SEND_SF_OPTIONS[autoSender.currentSfIndex];
+        long advertisedBw = AUTO_SEND_BW_OPTIONS[autoSender.currentBwIndex];
+        int advertisedCr = AUTO_SEND_CR_OPTIONS[autoSender.currentCrIndex];
+
+        // Use the current auto-send parameter set for this transmission
+        sf = advertisedSf;
+        bw = advertisedBw;
+        cr = advertisedCr;
         
         // Add metadata
         String metaPayload = compressedPayload + "<META:SF" + String(sf) + ",BW" + String(bw/1000) + ",CR" + String(cr) + ">";
@@ -1376,6 +1393,11 @@ void loop() {
         LoRa.print("ENHANCED:" + metaPayload);
         LoRa.endPacket();
         delay(50);
+
+        // Switch to the advertised parameters for ACK reception
+        LoRa.setSpreadingFactor(advertisedSf);
+        LoRa.setSignalBandwidth(advertisedBw);
+        LoRa.setCodingRate4(advertisedCr);
         LoRa.receive();
         
         // Wait for ACK
@@ -1406,6 +1428,24 @@ void loop() {
                 float snr = doc["snr"];
                 float delay_time = (millis() - startTime);
                 float datarate = (payload.length() * 8) / (delay_time / 1000.0);
+
+                // Update sender parameters if receiver suggested optimizations
+                if (doc.containsKey("opt_sf") && doc.containsKey("opt_bw") && doc.containsKey("opt_cr")) {
+                    int receiverSf = doc["opt_sf"];
+                    int receiverBw = doc["opt_bw"];
+                    int receiverCr = doc["opt_cr"];
+                    if (receiverSf >= 7 && receiverSf <= 12 &&
+                        (receiverBw == 125E3 || receiverBw == 250E3 || receiverBw == 500E3) &&
+                        receiverCr >= 5 && receiverCr <= 8) {
+                        sf = receiverSf;
+                        bw = receiverBw;
+                        cr = receiverCr;
+                        LoRa.setSpreadingFactor(sf);
+                        LoRa.setSignalBandwidth(bw);
+                        LoRa.setCodingRate4(cr);
+                        Serial.println("Auto-send applied optimized parameters: SF" + String(sf) + ", BW" + String(bw/1000) + ", CR" + String(cr));
+                    }
+                }
                 
                 // Send to API
                 if (WiFi.status() == WL_CONNECTED) {
@@ -1415,9 +1455,9 @@ void loop() {
                     String json = "{";
                     json += "\"type\":\"" + dataType + "\",";
                     json += "\"data\":\"" + compressedPayload + "\",";
-                    json += "\"sf\":" + String(initialSf) + ",";
-                    json += "\"bw\":" + String(initialBw) + ",";
-                    json += "\"cr\":" + String(initialCr) + ",";
+                    json += "\"sf\":" + String(advertisedSf) + ",";
+                    json += "\"bw\":" + String(advertisedBw) + ",";
+                    json += "\"cr\":" + String(advertisedCr) + ",";
                     json += "\"rssi\":" + String(rssi) + ",";
                     json += "\"snr\":" + String(snr) + ",";
                     json += "\"delay\":" + String(delay_time) + ",";
